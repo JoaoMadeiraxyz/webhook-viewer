@@ -1,10 +1,14 @@
-import { notifyClients } from "./stream/shared";
-
-let payloads: { data: any; receivedAt: string }[] = [];
-let isPaused = false;
+import {
+  getPayloads,
+  addPayload,
+  clearPayloads,
+  getPausedState,
+  togglePausedState,
+  notifyClients,
+} from "../../../lib/webhook-state";
 
 export async function POST(request: Request) {
-  if (isPaused) {
+  if (getPausedState()) {
     return new Response(
       JSON.stringify({ error: "Serviço temporariamente indisponível" }),
       { status: 503 }
@@ -20,33 +24,31 @@ export async function POST(request: Request) {
     });
   }
 
-  const newPayload = { data, receivedAt: new Date().toISOString() };
-  payloads.push(newPayload);
-  if (payloads.length > 20) payloads = payloads.slice(-20);
+  const newPayload = addPayload(data);
 
   notifyClients({
     type: "new_payload",
     payload: newPayload,
-    allPayloads: [...payloads].reverse(),
+    allPayloads: [...getPayloads()].reverse(),
   });
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 });
 }
 
 export async function PUT() {
-  isPaused = !isPaused;
+  const newPausedState = togglePausedState();
 
   notifyClients({
     type: "status_change",
-    isPaused,
-    allPayloads: [...payloads].reverse(),
+    isPaused: newPausedState,
+    allPayloads: [...getPayloads()].reverse(),
   });
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 });
 }
 
 export async function GET() {
-  return new Response(JSON.stringify(payloads), { status: 200 });
+  return new Response(JSON.stringify(getPayloads()), { status: 200 });
 }
 
 export async function DELETE(request: Request) {
@@ -59,15 +61,11 @@ export async function DELETE(request: Request) {
     });
   }
 
-  if (id) {
-    payloads = payloads.filter((_, index) => index !== Number(id));
-  } else {
-    payloads = [];
-  }
+  clearPayloads(id ? Number(id) : undefined);
 
   notifyClients({
     type: "payloads_updated",
-    allPayloads: [...payloads].reverse(),
+    allPayloads: [...getPayloads()].reverse(),
   });
 
   return new Response(JSON.stringify({ ok: true, id }), { status: 200 });
