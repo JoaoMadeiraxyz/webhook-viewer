@@ -1,19 +1,15 @@
-let clients: Set<ReadableStreamDefaultController> = new Set();
+import { clients } from "./shared";
 
 export async function GET() {
   const stream = new ReadableStream({
     start(controller) {
       clients.add(controller);
-
       controller.enqueue(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
-
-      const cleanup = () => {
-        clients.delete(controller);
-      };
-
-      return cleanup;
     },
-    cancel() {},
+    cancel() {
+      // Remove o cliente ao cancelar
+      clients.forEach((controller) => clients.delete(controller));
+    },
   });
 
   return new Response(stream, {
@@ -24,7 +20,6 @@ export async function GET() {
     },
   });
 }
-
 export function notifyClients(data: any) {
   clients.forEach((controller) => {
     try {

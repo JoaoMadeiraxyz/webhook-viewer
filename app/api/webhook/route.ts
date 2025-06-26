@@ -1,4 +1,4 @@
-import { notifyClients } from "./stream/route";
+import { notifyClients } from "./stream/shared";
 
 let payloads: { data: any; receivedAt: string }[] = [];
 let isPaused = false;
