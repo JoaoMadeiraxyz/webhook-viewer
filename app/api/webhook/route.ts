@@ -36,7 +36,6 @@ export async function POST(request: Request) {
 export async function PUT() {
   isPaused = !isPaused;
 
-  // Notifica sobre mudança de status
   notifyClients({
     type: "status_change",
     isPaused,

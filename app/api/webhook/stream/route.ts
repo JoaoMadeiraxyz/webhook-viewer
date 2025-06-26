@@ -3,12 +3,15 @@ import { clients } from "./shared";
 export async function GET() {
   const stream = new ReadableStream({
     start(controller) {
+      // Adiciona o cliente ao conjunto
       clients.add(controller);
+
+      // Envia mensagem inicial
       controller.enqueue(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
     },
-    cancel() {
-      // Remove o cliente ao cancelar
-      clients.forEach((controller) => clients.delete(controller));
+    cancel(controller) {
+      // Remove o cliente quando a conexão é cancelada
+      clients.delete(controller);
     },
   });
 
@@ -17,15 +20,8 @@ export async function GET() {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Cache-Control",
     },
-  });
-}
-export function notifyClients(data: any) {
-  clients.forEach((controller) => {
-    try {
-      controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
-    } catch (error) {
-      clients.delete(controller);
-    }
   });
 }
