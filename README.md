@@ -1,4 +1,5 @@
 This is a pretty basic webhook visualizer tool that helps you when developing with webhooks on localhost.
+(It may be possible to use the tool in production if you deploy it, but it isn't fully optimized for production).
 
 ## Getting Started
 
