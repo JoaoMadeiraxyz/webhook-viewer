@@ -1,4 +1,5 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a pretty basic webhook visualizer tool that helps you when developing with webhooks on localhost.
+(It may be possible to use the tool in production if you deploy it, but it isn't fully optimized for production).
 
 ## Getting Started
 
@@ -14,23 +15,10 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the visualizer.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+You can use the URL `http://localhost:3000/api/webhook` to send POST requests to the webhook.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The project offers utility tools like searching with text highlight, delete requests from the history individually or clear all the history, and lock the API so it won't receive new requests from the webhook until re-enabled.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+![128B6952-9138-4D85-AE57-67C0041CA9FB](https://github.com/user-attachments/assets/86ee8fec-5047-4332-b8cc-52b7cd2015ea)
