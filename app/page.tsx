@@ -179,7 +179,9 @@ export default function WebhooksPage() {
         return (
           <div
             key={`${p.receivedAt}-${i}`}
-            className="bg-gray-900 text-white p-4 mb-4 rounded-lg max-h-96 overflow-auto"
+            className={`${
+              p.data.fromMe ? "bg-slate-800" : "bg-gray-900"
+            } text-white p-4 mb-4 rounded-lg max-h-96 overflow-auto`}
           >
             <div className="w-full flex justify-between items-center mb-2">
               <div className="text-xs text-gray-400">

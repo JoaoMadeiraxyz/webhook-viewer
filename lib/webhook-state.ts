@@ -31,7 +31,6 @@ export function getPayloads() {
 export function addPayload(data: any) {
   const newPayload = { data, receivedAt: new Date().toISOString() };
   payloads.push(newPayload);
-  if (payloads.length > 20) payloads = payloads.slice(-20);
   return newPayload;
 }
 
