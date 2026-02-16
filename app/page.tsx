@@ -174,6 +174,8 @@ export default function WebhooksPage() {
         <p className="text-gray-500">Nenhum webhook recebido ainda.</p>
       )}
 
+      <p className="text-gray-500 text-sm mb-5">Quantidade de webhooks: {filteredPayloads.length}</p>
+      
       {filteredPayloads.map((p, i) => {
         const jsonString = JSON.stringify(p.data, null, 2);
         return (
