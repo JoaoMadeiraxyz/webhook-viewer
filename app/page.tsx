@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Trash2 } from "lucide-react";
+import { Copy, Trash2, Loader2, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
 
 type Payload = {
@@ -34,6 +34,13 @@ export default function WebhooksPage() {
   const [connectionStatus, setConnectionStatus] = useState<
     "connecting" | "connected" | "disconnected"
   >("connecting");
+  const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
+  const [tunnelStatus, setTunnelStatus] = useState<
+    "connecting" | "ready" | "error"
+  >("connecting");
+  const [tunnelError, setTunnelError] = useState<string | null>(null);
+  const [copiedTunnel, setCopiedTunnel] = useState(false);
+  const [isTunnelCollapsed, setIsTunnelCollapsed] = useState(false);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -85,6 +92,34 @@ export default function WebhooksPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const fetchTunnelUrl = async () => {
+      try {
+        const res = await fetch("/api/tunnel-url");
+        const data = await res.json();
+        setTunnelStatus(data.status);
+        setTunnelError(data.error || null);
+        if (data.url) {
+          setTunnelUrl(data.url);
+        }
+      } catch (error) {
+        console.error("Erro ao buscar URL do tunnel:", error);
+        setTunnelStatus("error");
+        setTunnelError("Failed to fetch tunnel status");
+      }
+    };
+
+    fetchTunnelUrl();
+
+    const interval = setInterval(() => {
+      if (tunnelStatus === "connecting") {
+        fetchTunnelUrl();
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [tunnelStatus]);
+
   const clearPayloads = async (e: any, id?: number) => {
     try {
       const correctIndex =
@@ -116,12 +151,96 @@ export default function WebhooksPage() {
     }
   };
 
+  const copyTunnelUrl = async () => {
+    if (tunnelUrl) {
+      try {
+        await navigator.clipboard.writeText(tunnelUrl);
+        setCopiedTunnel(true);
+        setTimeout(() => setCopiedTunnel(false), 2000);
+      } catch (error) {
+        console.error("Erro ao copiar URL:", error);
+      }
+    }
+  };
+
   const filteredPayloads = payloads.filter((p) =>
     JSON.stringify(p.data, null, 2).toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div className="max-w-3xl mx-auto p-5">
+      <div className="mb-6 p-4 rounded-lg bg-gradient-to-r from-purple-900/50 to-indigo-900/50 border border-purple-500/30">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsTunnelCollapsed(!isTunnelCollapsed)}
+              className="p-1 hover:bg-white/10 rounded transition-colors"
+              title={isTunnelCollapsed ? "Expandir" : "Colapsar"}
+            >
+              {isTunnelCollapsed ? (
+                <ChevronUp className="w-5 h-5 text-purple-300" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-purple-300" />
+              )}
+            </button>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                {tunnelStatus === "connecting" ? (
+                  <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
+                ) : tunnelStatus === "ready" ? (
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                ) : (
+                  <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                )}
+                <span className="text-sm font-medium text-purple-200">
+                  {tunnelStatus === "connecting"
+                    ? "Conectando tunnel..."
+                    : tunnelStatus === "ready"
+                    ? "Webhook URL pública:"
+                    : "Erro ao conectar tunnel"}
+                </span>
+              </div>
+              {tunnelStatus === "error" && tunnelError && (
+                <span className="text-xs text-red-300 ml-7">{tunnelError}</span>
+              )}
+            </div>
+          </div>
+          {!isTunnelCollapsed && tunnelUrl && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <code className="px-3 py-1.5 bg-black/40 rounded-md text-sm text-green-400 font-mono break-all">
+                {tunnelUrl}
+              </code>
+              <div className="flex gap-2">
+                <button
+                  onClick={copyTunnelUrl}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-md transition-colors"
+                >
+                  {copiedTunnel ? (
+                    <>
+                      <span className="text-green-300">Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={16} />
+                      Copiar
+                    </>
+                  )}
+                </button>
+                <a
+                  href={tunnelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md transition-colors"
+                >
+                  <ExternalLink size={16} />
+                  Testar
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">Webhooks Recebidos</h1>
