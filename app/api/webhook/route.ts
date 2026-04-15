@@ -50,10 +50,7 @@ function delay(ms: number) {
 
 export async function POST(request: Request) {
   if (getPausedState()) {
-    return new Response(
-      JSON.stringify({ error: "Serviço temporariamente indisponível" }),
-      { status: 503 }
-    );
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
   }
 
   // Captura de IP e domínio/origem
