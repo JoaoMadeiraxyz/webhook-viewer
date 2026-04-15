@@ -41,6 +41,7 @@ async function updateTunnelStatus(status, url = null, error = null) {
 async function connect() {
   let tunnelProcess = null;
   let tunnelUrl = null;
+  let isReconnecting = false;
 
   try {
     await updateTunnelStatus('connecting', null, null);
@@ -59,6 +60,7 @@ async function connect() {
         if (url) {
           tunnelUrl = url;
           retries = 0;
+          isReconnecting = false;
           console.log(`\n🚀 Cloudflare tunnel established!`);
           console.log(`   Public URL: ${url}`);
           console.log(`   Webhook URL: ${url}/api/webhook\n`);
@@ -68,17 +70,29 @@ async function connect() {
     });
 
     tunnelProcess.stderr.on('data', (data) => {
-      console.error(`[cloudflared] ${data.toString().trim()}`);
+      const output = data.toString().trim();
+      console.error(`[cloudflared] ${output}`);
+      
       if (!tunnelUrl) {
         const url = parseTunnelUrl(data);
         if (url) {
           tunnelUrl = url;
           retries = 0;
+          isReconnecting = false;
           console.log(`\n🚀 Cloudflare tunnel established!`);
           console.log(`   Public URL: ${url}`);
           console.log(`   Webhook URL: ${url}/api/webhook\n`);
           updateTunnelStatus('ready', url, null);
         }
+      } else if (output.includes('Serve tunnel error')) {
+        isReconnecting = true;
+        console.log('[tunnel] Connection lost, reconnecting...');
+        updateTunnelStatus('reconnecting', tunnelUrl, null);
+      } else if (output.includes('Registered tunnel connection') && isReconnecting) {
+        isReconnecting = false;
+        retries = 0;
+        console.log('[tunnel] Tunnel reconnected successfully!');
+        updateTunnelStatus('ready', tunnelUrl, null);
       }
     });
 
@@ -106,7 +120,7 @@ async function connect() {
         
         if (retries < MAX_RETRIES) {
           console.log(`[tunnel] Reconnecting... (attempt ${retries}/${MAX_RETRIES})`);
-          updateTunnelStatus('reconnecting', null, null);
+          updateTunnelStatus('reconnecting', tunnelUrl, null);
           
           setTimeout(() => {
             tunnelUrl = null;
