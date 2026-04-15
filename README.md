@@ -85,6 +85,28 @@ You can also use the local URL for testing:
 http://localhost:3000/api/webhook
 ```
 
+## API Endpoints
+
+### Receive Webhooks
+
+Send webhooks as POST requests to:
+
+```
+POST http://localhost:3000/api/webhook
+```
+
+The request body can be any JSON payload. Received webhooks are displayed in real-time in the UI.
+
+### Get Received Webhooks
+
+Retrieve all received webhooks as a JSON array:
+
+```
+GET http://localhost:3000/api/webhook
+```
+
+Returns an array of objects with `data` and `receivedAt` fields.
+
 ## Features
 
 - Real-time webhook visualization
