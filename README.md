@@ -53,6 +53,23 @@ When you run `npm run dev`, a public tunnel URL is automatically generated using
 - **No warning screen** - Unlike ngrok's free tier, there's no interstitial page
 - **Random URL** - A new random URL is generated each time you restart the server
 
+### Automatic Reconnection
+
+The tunnel automatically reconnects if the connection expires:
+
+- **Connection lost**: Yellow indicator shows "Tunnel expired, trying to reconnect..."
+- **Auto-reconnect**: System attempts to reconnect every 2 seconds (up to 5 attempts)
+- **Success**: Green indicator returns with a new URL + notification toast
+- **Max retries reached**: Error message shown, manual restart required
+
+The tunnel status updates in real-time without page refresh.
+
+**Note:** Tunnel state persists across page reloads but not across dev server restarts.
+
+### Developer Notes
+
+Tunnel status is exposed via SSE at `/api/tunnel-status/stream` and can be updated via POST to `/api/tunnel-status/update`. State is persisted in `.tunnel-state.json`.
+
 ### How to use
 
 1. Start the dev server: `npm run dev`
@@ -88,6 +105,11 @@ If you see this error in the UI, install cloudflared using the instructions abov
 - Check if port 3000 is available
 - Check your internet connection
 - Try restarting the dev server
+
+### Tunnel disconnected
+
+- If you see "Tunnel expired, trying to reconnect...", the system is auto-reconnecting
+- If you see "Max reconnection attempts reached", restart the dev server manually
 
 ### Port already in use
 

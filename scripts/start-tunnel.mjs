@@ -7,14 +7,35 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const port = process.argv[2] || 3000;
+const API_BASE = `http://localhost:${port}`;
 
-const tunnelUrlPath = path.join(__dirname, '..', '.tunnel-url');
+const stateFilePath = path.join(__dirname, '..', '.tunnel-state.json');
 
-fs.writeFileSync(tunnelUrlPath, JSON.stringify({ status: 'connecting', url: null }));
+let retries = 0;
+const MAX_RETRIES = 5;
 
 function parseTunnelUrl(data) {
   const match = data.toString().match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
   return match ? match[0] : null;
+}
+
+function writeStateToFile(state) {
+  fs.writeFileSync(stateFilePath, JSON.stringify(state), 'utf-8');
+}
+
+async function updateTunnelStatus(status, url = null, error = null) {
+  const state = { status, url, retries, error };
+  writeStateToFile(state);
+  
+  try {
+    await fetch(`${API_BASE}/api/tunnel-status/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, url, retries, error })
+    });
+  } catch (err) {
+    console.error('[tunnel] Failed to update tunnel status:', err.message);
+  }
 }
 
 async function connect() {
@@ -22,6 +43,8 @@ async function connect() {
   let tunnelUrl = null;
 
   try {
+    await updateTunnelStatus('connecting', null, null);
+
     tunnelProcess = spawn('cloudflared', [
       'tunnel',
       '--url', `http://localhost:${port}`
@@ -35,10 +58,11 @@ async function connect() {
         const url = parseTunnelUrl(data);
         if (url) {
           tunnelUrl = url;
+          retries = 0;
           console.log(`\n🚀 Cloudflare tunnel established!`);
           console.log(`   Public URL: ${url}`);
           console.log(`   Webhook URL: ${url}/api/webhook\n`);
-          fs.writeFileSync(tunnelUrlPath, JSON.stringify({ status: 'ready', url }));
+          updateTunnelStatus('ready', url, null);
         }
       }
     });
@@ -49,10 +73,11 @@ async function connect() {
         const url = parseTunnelUrl(data);
         if (url) {
           tunnelUrl = url;
+          retries = 0;
           console.log(`\n🚀 Cloudflare tunnel established!`);
           console.log(`   Public URL: ${url}`);
           console.log(`   Webhook URL: ${url}/api/webhook\n`);
-          fs.writeFileSync(tunnelUrlPath, JSON.stringify({ status: 'ready', url }));
+          updateTunnelStatus('ready', url, null);
         }
       }
     });
@@ -70,15 +95,27 @@ async function connect() {
       } else {
         console.error('Failed to start cloudflared:', err);
       }
-      fs.writeFileSync(tunnelUrlPath, JSON.stringify({ status: 'error', url: null, error: errorMessage }));
+      updateTunnelStatus('error', null, errorMessage);
       process.exit(1);
     });
 
     tunnelProcess.on('exit', (code) => {
       if (code !== 0 && code !== null) {
         console.error(`cloudflared exited with code ${code}`);
-        fs.writeFileSync(tunnelUrlPath, JSON.stringify({ status: 'error', url: null }));
-        process.exit(1);
+        retries++;
+        
+        if (retries < MAX_RETRIES) {
+          console.log(`[tunnel] Reconnecting... (attempt ${retries}/${MAX_RETRIES})`);
+          updateTunnelStatus('reconnecting', null, null);
+          
+          setTimeout(() => {
+            tunnelUrl = null;
+            connect();
+          }, 2000);
+        } else {
+          console.error('[tunnel] Max reconnection attempts reached. Please restart manually.');
+          updateTunnelStatus('error', null, 'Max reconnection attempts reached. Please restart manually.');
+        }
       }
     });
 
@@ -86,9 +123,6 @@ async function connect() {
       if (tunnelProcess) {
         tunnelProcess.kill('SIGTERM');
       }
-      try {
-        fs.unlinkSync(tunnelUrlPath);
-      } catch (e) {}
       process.exit(0);
     };
 
@@ -97,7 +131,7 @@ async function connect() {
 
   } catch (error) {
     console.error('Failed to establish cloudflare tunnel:', error);
-    fs.writeFileSync(tunnelUrlPath, JSON.stringify({ status: 'error', url: null, error: error.message }));
+    updateTunnelStatus('error', null, error.message);
     if (tunnelProcess) {
       tunnelProcess.kill();
     }

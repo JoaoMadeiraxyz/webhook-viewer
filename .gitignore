@@ -41,5 +41,5 @@ yarn-error.log*
 next-env.d.ts
 
 # tunnel
-.tunnel-url
+.tunnel-state.json
 .ngrok-url

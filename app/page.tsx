@@ -1,7 +1,7 @@
 "use client";
 
 import { Copy, Trash2, Loader2, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
 type Payload = {
   data: any;
@@ -26,6 +26,73 @@ function highlightText(text: string, search: string) {
   );
 }
 
+function useReconnectingEventSource(
+  url: string,
+  onMessage: (data: any) => void,
+  onOpen?: () => void,
+  maxRetries: number = 5
+) {
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const retryCountRef = useRef(0);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isUnmountedRef = useRef(false);
+
+  const connect = useCallback(() => {
+    if (isUnmountedRef.current) return;
+    
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    const eventSource = new EventSource(url);
+    eventSourceRef.current = eventSource;
+
+    eventSource.onopen = () => {
+      retryCountRef.current = 0;
+      onOpen?.();
+    };
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessage(data);
+      } catch (error) {
+        console.error("Error parsing SSE event:", error);
+      }
+    };
+
+    eventSource.onerror = () => {
+      eventSource.close();
+      
+      if (isUnmountedRef.current) return;
+      
+      if (retryCountRef.current < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000);
+        retryCountRef.current++;
+        
+        retryTimeoutRef.current = setTimeout(() => {
+          connect();
+        }, delay);
+      }
+    };
+  }, [url, onMessage, onOpen, maxRetries]);
+
+  useEffect(() => {
+    isUnmountedRef.current = false;
+    connect();
+
+    return () => {
+      isUnmountedRef.current = true;
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, [connect]);
+}
+
 export default function WebhooksPage() {
   const [payloads, setPayloads] = useState<Payload[]>([]);
   const [isPaused, setIsPaused] = useState(false);
@@ -36,11 +103,13 @@ export default function WebhooksPage() {
   >("connecting");
   const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
   const [tunnelStatus, setTunnelStatus] = useState<
-    "connecting" | "ready" | "error"
+    "connecting" | "reconnecting" | "ready" | "error"
   >("connecting");
   const [tunnelError, setTunnelError] = useState<string | null>(null);
   const [copiedTunnel, setCopiedTunnel] = useState(false);
   const [isTunnelCollapsed, setIsTunnelCollapsed] = useState(false);
+  const [showReconnectToast, setShowReconnectToast] = useState(false);
+  const previousTunnelStatusRef = useRef<string | null>(null);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -54,71 +123,56 @@ export default function WebhooksPage() {
     };
 
     fetchInitialData();
-
-    const eventSource = new EventSource("/api/webhook/stream");
-
-    eventSource.onopen = () => {
-      setConnectionStatus("connected");
-    };
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-
-        switch (data.type) {
-          case "connected":
-            setConnectionStatus("connected");
-            break;
-          case "new_payload":
-          case "payloads_updated":
-          case "status_change":
-            setPayloads(data.allPayloads);
-            if (data.isPaused !== undefined) {
-              setIsPaused(data.isPaused);
-            }
-            break;
-        }
-      } catch (error) {
-        console.error("Erro ao processar evento SSE:", error);
-      }
-    };
-
-    eventSource.onerror = () => {
-      setConnectionStatus("disconnected");
-    };
-
-    return () => {
-      eventSource.close();
-    };
   }, []);
 
-  useEffect(() => {
-    const fetchTunnelUrl = async () => {
-      try {
-        const res = await fetch("/api/tunnel-url");
-        const data = await res.json();
-        setTunnelStatus(data.status);
-        setTunnelError(data.error || null);
-        if (data.url) {
-          setTunnelUrl(data.url);
+  const handleWebhookMessage = useCallback((data: any) => {
+    switch (data.type) {
+      case "connected":
+        setConnectionStatus("connected");
+        break;
+      case "new_payload":
+      case "payloads_updated":
+      case "status_change":
+        setPayloads(data.allPayloads);
+        if (data.isPaused !== undefined) {
+          setIsPaused(data.isPaused);
         }
-      } catch (error) {
-        console.error("Erro ao buscar URL do tunnel:", error);
-        setTunnelStatus("error");
-        setTunnelError("Failed to fetch tunnel status");
-      }
-    };
+        break;
+    }
+  }, []);
 
-    fetchTunnelUrl();
+  const handleWebhookOpen = useCallback(() => {
+    setConnectionStatus("connected");
+  }, []);
 
-    const interval = setInterval(() => {
-      if (tunnelStatus === "connecting") {
-        fetchTunnelUrl();
-      }
-    }, 2000);
+  useReconnectingEventSource(
+    "/api/webhook/stream",
+    handleWebhookMessage,
+    handleWebhookOpen
+  );
 
-    return () => clearInterval(interval);
-  }, [tunnelStatus]);
+  const handleTunnelMessage = useCallback((data: any) => {
+    const previousStatus = previousTunnelStatusRef.current;
+    
+    setTunnelStatus(data.status);
+    setTunnelError(data.error || null);
+    
+    if (data.url) {
+      setTunnelUrl(data.url);
+    }
+    
+    if (previousStatus === "reconnecting" && data.status === "ready" && data.url) {
+      setShowReconnectToast(true);
+      setTimeout(() => setShowReconnectToast(false), 3000);
+    }
+    
+    previousTunnelStatusRef.current = data.status;
+  }, []);
+
+  useReconnectingEventSource(
+    "/api/tunnel-status/stream",
+    handleTunnelMessage
+  );
 
   const clearPayloads = async (e: any, id?: number) => {
     try {
@@ -168,8 +222,8 @@ export default function WebhooksPage() {
   );
 
   return (
-    <div className="max-w-3xl mx-auto p-5">
-      <div className="mb-6 p-4 rounded-lg bg-gradient-to-r from-purple-900/50 to-indigo-900/50 border border-purple-500/30">
+      <div className="max-w-3xl mx-auto p-5 relative">
+        <div className="mb-6 p-4 rounded-lg bg-gradient-to-r from-purple-900/50 to-indigo-900/50 border border-purple-500/30">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <button
@@ -183,27 +237,31 @@ export default function WebhooksPage() {
                 <ChevronDown className="w-5 h-5 text-purple-300" />
               )}
             </button>
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                {tunnelStatus === "connecting" ? (
-                  <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
-                ) : tunnelStatus === "ready" ? (
-                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                ) : (
-                  <div className="w-2 h-2 rounded-full bg-red-500"></div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  {tunnelStatus === "connecting" ? (
+                    <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
+                  ) : tunnelStatus === "reconnecting" ? (
+                    <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
+                  ) : tunnelStatus === "ready" ? (
+                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  ) : (
+                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                  )}
+                  <span className="text-sm font-medium text-purple-200">
+                    {tunnelStatus === "connecting"
+                      ? "Conectando tunnel..."
+                      : tunnelStatus === "reconnecting"
+                      ? "Tunnel expired, trying to reconnect..."
+                      : tunnelStatus === "ready"
+                      ? "Webhook URL pública:"
+                      : "Erro ao conectar tunnel"}
+                  </span>
+                </div>
+                {tunnelStatus === "error" && tunnelError && (
+                  <span className="text-xs text-red-300 ml-7">{tunnelError}</span>
                 )}
-                <span className="text-sm font-medium text-purple-200">
-                  {tunnelStatus === "connecting"
-                    ? "Conectando tunnel..."
-                    : tunnelStatus === "ready"
-                    ? "Webhook URL pública:"
-                    : "Erro ao conectar tunnel"}
-                </span>
               </div>
-              {tunnelStatus === "error" && tunnelError && (
-                <span className="text-xs text-red-300 ml-7">{tunnelError}</span>
-              )}
-            </div>
           </div>
           {!isTunnelCollapsed && tunnelUrl && (
             <div className="flex items-center gap-2 flex-wrap">
@@ -236,6 +294,11 @@ export default function WebhooksPage() {
                   Testar
                 </a>
               </div>
+            </div>
+          )}
+          {showReconnectToast && (
+            <div className="absolute bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-md shadow-lg flex items-center gap-2 animate-pulse">
+              <span>✅ Tunnel reconnected!</span>
             </div>
           )}
         </div>
