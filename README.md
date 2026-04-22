@@ -55,6 +55,12 @@ When you run `npm run dev`, a public tunnel URL is automatically generated using
 
 ### Automatic Reconnection
 
+> [!CAUTION]
+> **Automatic Reconnection Failure**
+>
+> There is a known failure at the tunnel automatic reconnection process.
+> I'll try to fix this on future updates.
+
 The tunnel automatically reconnects if the connection expires:
 
 - **Connection lost**: Yellow indicator shows "Tunnel expired, trying to reconnect..."
